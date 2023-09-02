@@ -410,26 +410,31 @@ async def check_user_tasks(user_id, maxtask):
     return len(total_tasks) >= maxtask
 
 
-def checking_access(user_id, button=None):
+async def checking_access(user_id, button=None):
     if not config_dict['TOKEN_TIMEOUT']:
         return None, button
     user_data.setdefault(user_id, {})
     data = user_data[user_id]
+    if DATABASE_URL:
+        data['time'] = await DbManager().get_token_expire_time(user_id)
     expire = data.get('time')
-    isExpired = (expire is None or expire is not None and (
-        time() - expire) > config_dict['TOKEN_TIMEOUT'])
+    isExpired = (expire is None or expire is not None and (time() - expire) > config_dict['TOKEN_TIMEOUT'])
     if isExpired:
-        token = data['token'] if expire is None and 'token' in data else str(
-            uuid4())
+        token = data['token'] if expire is None and 'token' in data else str(uuid4())
         if expire is not None:
             del data['time']
         data['token'] = token
+        if DATABASE_URL:
+            await DbManager().update_user_token(user_id, token)
         user_data[user_id].update(data)
         if button is None:
             button = ButtonMaker()
         button.ubutton('Get New Token', short_url(f'https://telegram.me/{bot_name}?start={token}'))
-        return 'Your <b>Token</b> is expired. Get a new one.', button
+        tmsg = 'Your <b>Token</b> is expired. Get a new one.'
+        tmsg += f'\n<b>Token Validity</b>: {get_readable_time(config_dict["TOKEN_TIMEOUT"])}'
+        return tmsg, button
     return None, button
+
 
 
 async def cmd_exec(cmd, shell=False):
