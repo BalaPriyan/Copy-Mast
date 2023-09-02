@@ -182,29 +182,44 @@ async def send_close_signal(_, query):
 
 
 async def start(_, message):
-    if len(message.command) > 1:
+    if len(message.command) > 1 and len(message.command[1]) == 36:
         userid = message.from_user.id
         input_token = message.command[1]
+        if DATABASE_URL:
+            stored_token = await DbManager().get_user_token(userid)
+            if stored_token is None:
+                return await sendMessage(message, 'This token is not associated with your account.\n\nPlease generate your own token.')
+            if input_token != stored_token:
+                return await sendMessage(message, 'Invalid token.\n\nPlease generate a new one.')
         if userid not in user_data:
             return await sendMessage(message, 'This token is not yours!\n\nKindly generate your own.')
         data = user_data[userid]
         if 'token' not in data or data['token'] != input_token:
             return await sendMessage(message, 'Token already used!\n\nKindly generate a new one.')
-        data['token'] = str(uuid4())
-        data['time'] = time()
+        token = str(uuid4())
+        ttime = time()
+        data['token'] = token
+        data['time'] = ttime
         user_data[userid].update(data)
+        if DATABASE_URL:
+            await DbManager().update_user_tdata(userid, token, ttime)
         msg = 'Token refreshed successfully!\n\n'
         msg += f'Validity: {get_readable_time(int(config_dict["TOKEN_TIMEOUT"]))}'
         return await sendMessage(message, msg)
-    elif config_dict['DM_MODE']:
+    elif config_dict['DM_MODE'] and message.chat.type != message.chat.type.SUPERGROUP:
         start_string = 'Bot Started.\n' \
-                       'Now I can send your stuff here.\n' \
-                       'Use me here: @Z_Mirror'
-    else:
-        start_string = 'Sorry, you cant use me here!\n' \
-                       'Join @Z_Mirror to use me.\n' \
+                       'Now I will send all of your stuffs here.\n' \
+                       'Use me at: @Z_Mirror'
+    elif not config_dict['DM_MODE'] and message.chat.type != message.chat.type.SUPERGROUP:
+        start_string = 'Sorry, you cannot use me here!\n' \
+                       'Join: @Z_Mirror to use me.\n' \
                        'Thank You'
+    else:
+        tag = message.from_user.mention
+        start_string = 'Start me in DM, not in the group.\n' \
+                       f'cc: {tag}'
     await sendMessage(message, start_string)
+
 
 
 async def restart(_, message):
